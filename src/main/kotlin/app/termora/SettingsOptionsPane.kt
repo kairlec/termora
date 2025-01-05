@@ -14,6 +14,7 @@ import app.termora.sync.SyncerProvider
 import app.termora.terminal.CursorStyle
 import app.termora.terminal.DataKey
 import app.termora.terminal.panel.TerminalPanel
+import app.termora.windows.shell.LocalShellDetect
 import cash.z.ecc.android.bip39.Mnemonics
 import com.formdev.flatlaf.FlatLaf
 import com.formdev.flatlaf.extras.FlatSVGIcon
@@ -63,8 +64,7 @@ class SettingsOptionsPane : OptionsPane() {
         private fun loadShells(): List<String> {
             val shells = mutableListOf<String>()
             if (SystemInfo.isWindows) {
-                shells.add("cmd.exe")
-                shells.add("powershell.exe")
+                LocalShellDetect.getSupportAllPath().forEach { shells.add(it.executablePath.toString()) }
             } else {
                 kotlin.runCatching {
                     val process = ProcessBuilder("cat", "/etc/shells").start()
