@@ -14,6 +14,8 @@ import app.termora.sync.SyncerProvider
 import app.termora.terminal.CursorStyle
 import app.termora.terminal.DataKey
 import app.termora.terminal.panel.TerminalPanel
+import app.termora.localshell.LocalShell
+import app.termora.localshell.LocalShellDetect
 import cash.z.ecc.android.bip39.Mnemonics
 import com.formdev.flatlaf.FlatLaf
 import com.formdev.flatlaf.extras.FlatSVGIcon
@@ -60,34 +62,8 @@ class SettingsOptionsPane : OptionsPane() {
         private val localShells by lazy { loadShells() }
         var pulled = false
 
-        private fun loadShells(): List<String> {
-            val shells = mutableListOf<String>()
-            if (SystemInfo.isWindows) {
-                shells.add("cmd.exe")
-                shells.add("powershell.exe")
-            } else {
-                kotlin.runCatching {
-                    val process = ProcessBuilder("cat", "/etc/shells").start()
-                    if (process.waitFor() != 0) {
-                        throw LastErrorException(process.exitValue())
-                    }
-                    process.inputStream.use { input ->
-                        String(input.readAllBytes()).lines()
-                            .filter { e -> !e.trim().startsWith('#') }
-                            .filter { e -> e.isNotBlank() }
-                            .forEach { shells.add(it.trim()) }
-                    }
-                }.onFailure {
-                    shells.add("/bin/bash")
-                    shells.add("/bin/csh")
-                    shells.add("/bin/dash")
-                    shells.add("/bin/ksh")
-                    shells.add("/bin/sh")
-                    shells.add("/bin/tcsh")
-                    shells.add("/bin/zsh")
-                }
-            }
-            return shells
+        private fun loadShells(): Collection<LocalShell> {
+            return LocalShellDetect.getSupportAllLocalShell()
         }
 
 
@@ -231,7 +207,7 @@ class SettingsOptionsPane : OptionsPane() {
         private val cursorStyleComboBox = FlatComboBox<CursorStyle>()
         private val debugComboBox = YesOrNoComboBox()
         private val fontComboBox = FlatComboBox<String>()
-        private val shellComboBox = FlatComboBox<String>()
+        private val shellComboBox = FlatComboBox<LocalShell>()
         private val maxRowsTextField = IntSpinner(0, 0)
         private val fontSizeTextField = IntSpinner(0, 9, 99)
         private val terminalSetting get() = Database.instance.terminal
@@ -289,7 +265,7 @@ class SettingsOptionsPane : OptionsPane() {
 
             shellComboBox.addItemListener {
                 if (it.stateChange == ItemEvent.SELECTED) {
-                    terminalSetting.localShell = shellComboBox.selectedItem as String
+                    terminalSetting.localShell = shellComboBox.selectedItem as LocalShell
                 }
             }
 

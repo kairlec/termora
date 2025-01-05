@@ -5,6 +5,7 @@ import app.termora.macro.MacroPtyConnector
 import app.termora.terminal.PtyConnector
 import app.termora.terminal.PtyConnectorDelegate
 import app.termora.terminal.PtyProcessConnector
+import app.termora.localshell.LocalShellDetect
 import com.pty4j.PtyProcessBuilder
 import org.apache.commons.lang3.SystemUtils
 import java.nio.charset.Charset
@@ -29,13 +30,13 @@ class PtyConnectorFactory {
         envs["TERM"] = "xterm-256color"
         envs.putAll(env)
 
-        val command = database.terminal.localShell
-        val ptyProcess = PtyProcessBuilder(arrayOf(command))
+        val localShell = database.terminal.localShell ?: throw IllegalStateException("no local shell provided")
+        val ptyProcess = PtyProcessBuilder(arrayOf(localShell.executablePath.toString(), *localShell.arguments.toTypedArray()))
             .setEnvironment(envs)
             .setInitialRows(rows)
             .setInitialColumns(cols)
             .setConsole(false)
-            .setDirectory(SystemUtils.USER_HOME)
+            .setDirectory(localShell.homeDirectory ?: SystemUtils.USER_HOME)
             .setCygwin(false)
             .setUseWinConPty(SystemUtils.IS_OS_WINDOWS)
             .setRedirectErrorStream(false)

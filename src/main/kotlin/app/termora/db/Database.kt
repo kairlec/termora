@@ -4,6 +4,8 @@ import app.termora.*
 import app.termora.Application.ohMyJson
 import app.termora.highlight.KeywordHighlight
 import app.termora.keymgr.OhKeyPair
+import app.termora.localshell.LocalShell
+import app.termora.localshell.LocalShellDetect
 import app.termora.macro.Macro
 import app.termora.sync.SyncType
 import app.termora.terminal.CursorStyle
@@ -25,6 +27,7 @@ import kotlin.reflect.KProperty
 import kotlin.time.Duration.Companion.minutes
 
 class Database private constructor(private val env: Environment) : Disposable {
+    private object NOT_INITIALIZED
     companion object {
         private const val HOST_STORE = "Host"
         private const val KEYWORD_HIGHLIGHT_STORE = "KeywordHighlight"
@@ -298,34 +301,34 @@ class Database private constructor(private val env: Environment) : Disposable {
             putString(name, mapOf(key to value))
         }
 
-
         protected abstract inner class PropertyLazyDelegate<T>(protected val initializer: () -> T) :
             ReadWriteProperty<Any?, T> {
-            private var value: T? = null
+            private var value: Any? = NOT_INITIALIZED
 
             override fun getValue(thisRef: Any?, property: KProperty<*>): T {
-                if (value == null) {
+                if (value === NOT_INITIALIZED) {
                     val v = getString(property.name)
                     value = if (v == null) {
                         initializer.invoke()
                     } else {
-                        convertValue(v)
+                        convertFromString(v)
                     }
                 }
 
-                if (value == null) {
-                    value = initializer.invoke()
-                }
-                return value!!
+                @Suppress("UNCHECKED_CAST")
+                return value as T
             }
 
-            abstract fun convertValue(value: String): T
+            abstract fun convertFromString(value: String): T
+
+            open fun convertToString(value: T): String {
+                return value.toString()
+            }
 
             override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
                 this.value = value
-                putString(property.name, value.toString())
+                putString(property.name, convertToString(value))
             }
-
         }
 
         protected abstract inner class PropertyDelegate<T>(private val defaultValue: T) :
@@ -334,14 +337,14 @@ class Database private constructor(private val env: Environment) : Disposable {
 
         protected inner class StringPropertyDelegate(defaultValue: String) :
             PropertyDelegate<String>(defaultValue) {
-            override fun convertValue(value: String): String {
+            override fun convertFromString(value: String): String {
                 return value
             }
         }
 
         protected inner class IntPropertyDelegate(defaultValue: Int) :
             PropertyDelegate<Int>(defaultValue) {
-            override fun convertValue(value: String): Int {
+            override fun convertFromString(value: String): Int {
                 return value.toIntOrNull() ?: initializer.invoke()
             }
         }
@@ -349,29 +352,40 @@ class Database private constructor(private val env: Environment) : Disposable {
 
         protected inner class LongPropertyDelegate(defaultValue: Long) :
             PropertyDelegate<Long>(defaultValue) {
-            override fun convertValue(value: String): Long {
+            override fun convertFromString(value: String): Long {
                 return value.toLongOrNull() ?: initializer.invoke()
             }
         }
 
         protected inner class BooleanPropertyDelegate(defaultValue: Boolean) :
             PropertyDelegate<Boolean>(defaultValue) {
-            override fun convertValue(value: String): Boolean {
+            override fun convertFromString(value: String): Boolean {
                 return value.toBooleanStrictOrNull() ?: initializer.invoke()
             }
         }
 
         protected open inner class StringPropertyLazyDelegate(initializer: () -> String) :
             PropertyLazyDelegate<String>(initializer) {
-            override fun convertValue(value: String): String {
+            override fun convertFromString(value: String): String {
                 return value
+            }
+        }
+
+        protected open inner class LocalShellPropertyLazyDelegate(initializer: () -> LocalShell?) :
+            PropertyLazyDelegate<LocalShell?>(initializer) {
+            override fun convertFromString(value: String): LocalShell? {
+                return LocalShellDetect.getLocalShellById(value) ?: initializer.invoke()
+            }
+
+            override fun convertToString(value: LocalShell?): String {
+                return value?.id ?: ""
             }
         }
 
 
         protected inner class CursorStylePropertyDelegate(defaultValue: CursorStyle) :
             PropertyDelegate<CursorStyle>(defaultValue) {
-            override fun convertValue(value: String): CursorStyle {
+            override fun convertFromString(value: String): CursorStyle {
                 try {
                     return CursorStyle.valueOf(value)
                 } catch (e: Exception) {
@@ -383,7 +397,7 @@ class Database private constructor(private val env: Environment) : Disposable {
 
         protected inner class SyncTypePropertyDelegate(defaultValue: SyncType) :
             PropertyDelegate<SyncType>(defaultValue) {
-            override fun convertValue(value: String): SyncType {
+            override fun convertFromString(value: String): SyncType {
                 try {
                     return SyncType.valueOf(value)
                 } catch (e: Exception) {
@@ -408,7 +422,7 @@ class Database private constructor(private val env: Environment) : Disposable {
         /**
          * 默认终端
          */
-        var localShell by StringPropertyLazyDelegate { Application.getDefaultShell() }
+        var localShell by LocalShellPropertyLazyDelegate { Application.getDefaultShell() }
 
         /**
          * 字体大小
